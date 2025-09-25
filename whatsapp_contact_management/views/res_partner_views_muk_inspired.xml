@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- View de pesquisa permanece a mesma -->
+    <record id="whatsapp_contact_search_view" model="ir.ui.view">
+        <field name="name">res.partner.whatsapp.search</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_res_partner_filter"/>
+        <field name="arch" type="xml">
+            <xpath expr="//group" position="after">
+                <searchpanel>
+                    <field name="category_id" string="Tags" icon="fa-tags" select="multi" enable_counters="1"/>
+                </searchpanel>
+            </xpath>
+        </field>
+    </record>
+    
+    <!-- View Kanban com a correção final -->
+    <record id="whatsapp_contact_kanban_view" model="ir.ui.view">
+        <field name="name">res.partner.whatsapp.kanban</field>
+        <field name="model">res.partner</field>
+        <field name="arch" type="xml">
+            <kanban class="o_res_partner_kanban" group_create="0">
+                <field name="id"/>
+                <field name="image_128"/>
+                <field name="display_name"/>
+                <field name="mobile"/>
+                <field name="email"/>
+                <field name="category_id"/>
+                <field name="contact_type"/>
+                <field name="whatsapp_verified"/>
+                <templates>
+                    <!-- ======================= INÍCIO DA CORREÇÃO ======================= -->
+                    <!-- Trocado 'kanban-card' de volta para 'kanban-box' -->
+                    <t t-name="kanban-box">
+                        <div class="oe_kanban_global_click card shadow-sm h-100 p-2">
+                            <div class="d-flex align-items-center mb-2">
+                                <div class="me-3">
+                                    <img t-att-src="kanban_image('res.partner', 'image_128', record.id.raw_value)" class="oe_avatar" style="width: 60px; height: 60px;" alt="Contact photo"/>
+                                </div>
+                                <div class="flex-grow-1 text-truncate">
+                                    <strong class="o_kanban_record_title d-block text-truncate">
+                                        <field name="display_name"/>
+                                        <i t-if="record.whatsapp_verified.raw_value" class="fa fa-check-circle text-success ms-1" title="WhatsApp Verificado"/>
+                                    </strong>
+                                    <div t-if="record.mobile.value" class="text-muted small o_text_overflow"><i class="fa fa-whatsapp me-1 text-success"/> <t t-esc="record.mobile.value"/></div>
+                                    <div t-if="record.email.value" class="text-muted small o_text_overflow"><i class="fa fa-envelope-o me-1 text-muted"/> <t t-esc="record.email.value"/></div>
+                                </div>
+                            </div>
+                            <div class="o_kanban_tags_section mt-1">
+                                <field name="category_id" widget="many2many_tags" options="{'color_field': 'color'}"/>
+                            </div>
+                            <div class="oe_kanban_footer mt-auto pt-2">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div class="oe_kanban_bottom_left">
+                                        <span t-if="record.contact_type.raw_value == 'private'" class="badge text-bg-info" title="Private Contact"><i class="fa fa-user-secret me-1"/>Privado</span>
+                                        <span t-if="record.contact_type.raw_value == 'company'" class="badge text-bg-success" title="Company Contact"><i class="fa fa-building me-1"/>Empresa</span>
+                                    </div>
+                                    <div class="oe_kanban_bottom_right"/>
+                                </div>
+                            </div>
+                        </div>
+                    </t>
+                    <!-- ======================== FIM DA CORREÇÃO ========================= -->
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <!-- View de Lista com indicador visual -->
+    <record id="whatsapp_contact_tree_view" model="ir.ui.view">
+        <field name="name">res.partner.whatsapp.tree</field>
+        <field name="model">res.partner</field>
+        <field name="arch" type="xml">
+            <list string="Contacts" decoration-muted="active == False">
+                <field name="whatsapp_verified" nolabel="1" widget="boolean_toggle" options="{'icon_true': 'check-circle text-success', 'icon_false': 'times-circle text-danger'}"/>
+                <field name="contact_type" nolabel="1" widget="selection_icons" options="{'icons': {'private': 'user-secret text-info', 'company': 'building text-success'}}" class="px-1"/>
+                <field name="comment" nolabel="1" widget="text_icon" class="px-1"/>
+                <field name="image_128" widget="image" nolabel="1" options="{'size': [30, 30]}" class="px-1"/>
+                <field name="display_name" string="Name"/>
+                <field name="mobile"/>
+                <field name="email"/>
+                <field name="category_id" widget="many2many_tags" options="{'color_field': 'color'}"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- View de sub-contatos permanece a mesma -->
+    <record id="res_partner_view_form_inherit_childs" model="ir.ui.view">
+        <field name="name">res.partner.form.inherit.childs</field>
+        <field name="model">res.partner</field>
+        <field name="inherit_id" ref="base.view_partner_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='child_ids']" position="replace">
+                <field name="child_ids" mode="list">
+                    <list>
+                        <field name="image_128" widget="image" nolabel="1" options="{'size': [30, 30]}"/>
+                        <field name="name"/>
+                        <field name="title"/>
+                        <field name="phone"/>
+                        <field name="mobile"/>
+                        <field name="email"/>
+                    </list>
+                </field>
+            </xpath>
+        </field>
+    </record>
+</odoo>

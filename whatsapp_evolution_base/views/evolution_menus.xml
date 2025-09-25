@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <!-- Top Menu -->
+        <menuitem id="whatsapp_evolution_menu_root" name="WhatsApp Evolution" sequence="10" web_icon="fa fa-whatsapp"/>
+
+        <!-- Submenu: Instances -->
+        <menuitem id="whatsapp_instance_menu_item" name="Instances" parent="whatsapp_evolution_menu_root" action="whatsapp_evolution_base.whatsapp_instance_action" sequence="10"/>
+
+        <!-- Submenu: Message Logs -->
+        <menuitem id="whatsapp_message_logs_menu_item" name="Message Logs" parent="whatsapp_evolution_menu_root" action="whatsapp_evolution_base.whatsapp_message_action" sequence="20"/>
+
+        <!-- NOVO: Menu para a Ação de Sincronização -->
+        <menuitem
+            id="whatsapp_evolution_sync_menu"
+            name="Sincronizar Instâncias"
+            parent="whatsapp_evolution_menu_root"
+            action="action_server_sync_whatsapp_instances"
+            sequence="30"
+            groups="base.group_system"/>
+
+        <!-- Menu Item for WhatsApp Settings (under Configuration) -->
+        <menuitem id="whatsapp_evolution_menu_settings"
+            name="Configuration"
+            parent="whatsapp_evolution_menu_root"
+            action="whatsapp_evolution_base.action_whatsapp_config_settings"
+            sequence="100"/>
+    </data>
+</odoo>

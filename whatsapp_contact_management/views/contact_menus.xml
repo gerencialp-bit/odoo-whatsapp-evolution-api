@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <!-- Menu Principal -->
+        <menuitem id="whatsapp_contact_management_menu_root"
+                  name="Whatsapp Contact"
+                  sequence="10"
+                  web_icon="whatsapp_contact_management,static/description/icon.png"/>
+
+        <!-- Menus de Contatos -->
+        <menuitem id="whatsapp_contact_management_menu_company_contacts"
+                  name="Company Contacts"
+                  parent="whatsapp_contact_management_menu_root"
+                  action="action_company_contacts"
+                  sequence="10"/>
+                  
+        <menuitem id="whatsapp_contact_management_menu_private_contacts"
+                  name="My Contacts"
+                  parent="whatsapp_contact_management_menu_root"
+                  action="action_private_contacts"
+                  sequence="20"/>
+
+        <!-- =================== MUDANÇA AQUI =================== --> 
+        <!-- Ação para abrir nossa nova janela de Configurações --> 
+        <record id="action_whatsapp_contact_settings" model="ir.actions.act_window"> 
+            <field name="name">Configuration</field> 
+            <field name="type">ir.actions.act_window</field> 
+            <field name="res_model">whatsapp.contact.config</field> <!-- Aponta para o novo modelo --> 
+            <field name="view_mode">form</field> 
+            <field name="target">main</field> 
+            <field name="res_id" ref="whatsapp_contact_management.whatsapp_contact_config_singleton_record"/> <!-- Abre o registro único --> 
+        </record> 
+ 
+        <!-- O item de menu agora usa a ação corrigida --> 
+        <menuitem id="whatsapp_contact_management_menu_settings" 
+                  name="Configuration" 
+                  parent="whatsapp_contact_management_menu_root" 
+                  action="action_whatsapp_contact_settings" 
+                  sequence="99" 
+                  groups="base.group_system"/>
+                  
+    </data>
+</odoo>

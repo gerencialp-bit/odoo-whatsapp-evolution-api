@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="whatsapp_contact_config_singleton_record" model="whatsapp.contact.config">
+        <field name="name">WhatsApp Contact Configuration</field>
+        <field name="revert_promotion_window_hours">24</field>
+    </record>
+</odoo>

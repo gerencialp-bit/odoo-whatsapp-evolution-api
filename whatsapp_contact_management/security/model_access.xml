@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <!--
+            This record ensures that the model 'whatsapp.contact.config'
+            has a known XML ID ('model_whatsapp_contact_config'),
+            which can then be reliably used in the ir.model.access.csv file.
+        -->
+        <record id="model_whatsapp_contact_config" model="ir.model">
+            <field name="name">WhatsApp Contact Management Configuration (Singleton)</field>
+            <field name="model">whatsapp.contact.config</field>
+            <field name="state">base</field>
+        </record>
+    </data>
+</odoo>

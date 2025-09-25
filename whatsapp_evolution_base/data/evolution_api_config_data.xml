@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+
+    <record id="evolution_api_config_singleton_record" model="evolution.api.config">
+        <!-- MUDANÇA: Adicionado o valor para o novo campo 'name' -->
+        <field name="name">Evolution API Configuration</field>
+        <field name="evolution_api_url"></field>
+        <field name="evolution_api_global_key"></field>
+    </record>
+
+</odoo>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        Este arquivo modifica a ação padrão do módulo de Contatos do Odoo
+        para garantir que ele exiba apenas os contatos da empresa (não privados).
+    -->
+    <record id="contacts.action_contacts" model="ir.actions.act_window">
+        <field name="name">Contacts</field>
+        <!-- Adiciona um domínio para filtrar apenas contatos públicos -->
+        <field name="domain">[('is_private', '=', False)]</field>
+        <!-- Define o valor padrão para novos contatos criados a partir desta view -->
+        <field name="context">{'default_is_private': False}</field>
+    </record>
+</odoo>

@@ -1,0 +1,5 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_res_partner_for_whatsapp,res.partner for whatsapp,base.model_res_partner,base.group_user,1,1,1,1
+access_res_partner_whatsapp_instance_field,res.partner.whatsapp_instance_field,base.model_res_partner,base.group_user,1,1,1,1
+access_whatsapp_instance_user_field,whatsapp.instance.user_field,whatsapp_evolution_base.model_whatsapp_instance,base.group_user,1,1,1,1
+access_whatsapp_contact_config_system,whatsapp.contact.config system access,model_whatsapp_contact_config,base.group_system,1,1,0,0

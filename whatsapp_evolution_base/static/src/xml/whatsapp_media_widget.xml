@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<templates xml:space="preserve">
+
+     <t t-name="whatsapp_evolution_base.WhatsappListMediaWidget" owl="1">
+         <div class="o_whatsapp_list_widget">
+             <!-- Caso 1: É uma mensagem de áudio. O player tem prioridade e é a única coisa que mostramos. -->
+             <t t-if="props.record.data.media_type === 'audio' and props.record.data.media_url">
+                 <audio t-att-src="props.record.data.media_url"
+                        controls="controls"
+                        preload="none"
+                        style="max-width: 250px;">
+                     Seu navegador não suporta áudio.
+                 </audio>
+             </t>
+             
+             <!-- Caso 2: Não é áudio. Pode ser texto, outra mídia, ou mídia com legenda. -->
+             <t t-else="">
+                 <!-- Primeiro, mostramos a legenda (campo 'body') se ela existir. -->
+                 <div t-if="props.record.data.body" class="o_whatsapp_body_text mb-1">
+                     <span t-esc="props.record.data.body"/>
+                 </div>
+                 
+                 <!-- Se for um tipo de mídia (que não seja áudio), mostramos o texto descritivo.
+                      Isso garante que mesmo mídias sem legenda tenham uma indicação. -->
+                 <div t-if="props.record.data.media_type">
+                     <span class="text-muted fst-italic" t-esc="friendlyMediaText"/>
+                 </div>
+             </t>
+         </div>
+     </t>
+
+</templates>

@@ -1,0 +1,8 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_whatsapp_instance_user,whatsapp.instance.user,model_whatsapp_instance,base.group_user,1,1,1,0
+access_whatsapp_instance_admin,whatsapp.instance.admin,model_whatsapp_instance,base.group_system,1,1,1,1
+access_whatsapp_message_user,whatsapp.message.user,model_whatsapp_message,base.group_user,1,0,0,0
+access_whatsapp_message_admin,whatsapp.message.admin,model_whatsapp_message,base.group_system,1,1,1,1
+access_evolution_api_config_user,evolution.api.config.user,model_evolution_api_config,base.group_user,1,1,1,1
+access_whatsapp_webhook_event_user,whatsapp.webhook.event.user,model_whatsapp_webhook_event,base.group_user,1,0,0,0
+access_whatsapp_webhook_event_admin,whatsapp.webhook.event.admin,model_whatsapp_webhook_event,base.group_system,1,1,1,1

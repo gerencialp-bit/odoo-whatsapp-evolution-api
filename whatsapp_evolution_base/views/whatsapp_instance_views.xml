@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Views Kanban e Tree/List permanecem as mesmas -->
+    <record id="whatsapp_instance_kanban_view" model="ir.ui.view">
+        <field name="name">whatsapp.instance.kanban</field>
+        <field name="model">whatsapp.instance</field>
+        <field name="arch" type="xml">
+            <kanban class="o_kanban_mobile" group_create="0" import="false">
+                <field name="id"/>
+                <field name="name"/>
+                <field name="status"/>
+                <field name="profile_name"/>
+                <field name="phone_number"/>
+                <field name="profile_picture"/>
+                <field name="contact_count"/>
+                <field name="chat_count"/>
+                <field name="message_count"/>
+                <templates>
+                    <t t-name="card">
+                        <div class="oe_kanban_global_click card shadow-sm h-100">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between">
+                                    <strong class="card-title mb-2 text-truncate" t-esc="record.name.value"/>
+                                    <div class="dropdown">
+                                        <a role="button" data-bs-toggle="dropdown" aria-expanded="false" title="Menu" class="text-muted"><i class="fa fa-cog"/></a>
+                                        <div class="dropdown-menu" role="menu">
+                                            <a role="menuitem" type="edit" class="dropdown-item">Editar</a>
+                                            <a role="menuitem" type="delete" class="dropdown-item">Excluir</a>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="d-flex align-items-center mb-2">
+                                    <div class="me-2">
+                                        <img t-attf-src="/web/image/whatsapp.instance/#{record.id.raw_value}/profile_picture"
+                                             class="oe_avatar" style="width: 48px; height: 48px;" alt="Profile Picture"/>
+                                    </div>
+                                    <div class="flex-grow-1 text-truncate">
+                                        <div t-if="record.profile_name.value" class="fw-bold"><t t-esc="record.profile_name.value"/></div>
+                                        <div t-if="record.phone_number.value" class="text-muted"><t t-esc="record.phone_number.value"/></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card-footer bg-white text-muted border-top-0 pt-0">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <t t-if="record.status.raw_value == 'connected'"><span class="badge text-bg-success">Conectado</span></t>
+                                        <t t-if="record.status.raw_value == 'disconnected'"><span class="badge text-bg-danger">Desconectado</span></t>
+                                        <t t-if="record.status.raw_value == 'connecting'"><span class="badge text-bg-warning">Conectando...</span></t>
+                                        <t t-if="record.status.raw_value == 'error'"><span class="badge text-bg-danger">Erro</span></t>
+                                    </div>
+                                    <div class="text-nowrap small">
+                                        <span class="me-2" title="Contatos"><i class="fa fa-users"/> <t t-esc="record.contact_count.value"/></span>
+                                        <span class="me-2" title="Chats"><i class="fa fa-comments"/> <t t-esc="record.chat_count.value"/></span>
+                                        <span title="Mensagens"><i class="fa fa-envelope"/> <t t-esc="record.message_count.value"/></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+        
+    <record id="whatsapp_instance_view_tree" model="ir.ui.view">
+        <field name="name">whatsapp.instance.tree</field>
+        <field name="model">whatsapp.instance</field>
+        <field name="arch" type="xml">
+            <list string="Instâncias" import="false">
+                <field name="name"/>
+                <field name="profile_name"/>
+                <field name="phone_number"/>
+                <field name="instance_type"/>
+                <field name="status" widget="badge"
+                        decoration-success="status == 'connected'"
+                        decoration-warning="status == 'connecting'"
+                        decoration-danger="status == 'error'"
+                        decoration-muted="status == 'disconnected'"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- FORM VIEW COM LAYOUT E CHATTER CORRIGIDOS -->
+    <record id="whatsapp_instance_view_form" model="ir.ui.view">
+        <field name="name">whatsapp.instance.form</field>
+        <field name="model">whatsapp.instance</field>
+        <field name="arch" type="xml">
+            <form string="WhatsApp Instance" duplicate="false">
+                <header>
+                    <button name="action_connect_instance" type="object" string="Conectar" class="btn-primary" invisible="status in ['connected', 'connecting'] or id == False"/>
+                    <button name="action_restart_instance" type="object" string="Reiniciar" class="btn-warning" invisible="status != 'connected'"/>
+                    <button name="action_disconnect_instance" type="object" string="Desconectar" class="btn-secondary" invisible="status != 'connected'"/>
+                    <button name="action_refresh_status" string="Atualizar Status" type="object" class="btn-info" invisible="id == False"/>
+                    <!-- ======================= INÍCIO DA ALTERAÇÃO (BOTÃO) ======================= -->
+                    <button name="action_sync_with_odoo_user" type="object" string="Sincronizar com Usuário Odoo" class="btn-secondary" icon="fa-refresh" invisible="not user_id or status != 'connected'"
+                            confirm="Isso substituirá o nome, celular e foto do usuário do Odoo com os dados desta instância. Deseja continuar?"/>
+                    <!-- ======================== FIM DA ALTERAÇÃO (BOTÃO) ========================= -->
+                    <button name="action_delete_instance" string="Excluir Instância" type="object" class="btn-danger" invisible="id == False"
+                            confirm="Você tem certeza que deseja excluir esta instância? Esta ação também a removerá da Evolution API e não pode ser desfeita."/>
+                    
+                    <field name="status" widget="statusbar" statusbar_visible="disconnected,connecting,connected"/>
+                </header>
+                <sheet>
+                    <!-- ======================= INÍCIO DA ALTERAÇÃO (LAYOUT) ======================= -->
+                    <div class="oe_title mb-3">
+                        <h1>
+                            <field name="name" readonly="id != False" placeholder="Ex: Vendas"/>
+                        </h1>
+                    </div>
+                    <div class="row">
+                        <div class="col-lg-8">
+                             <group>
+                                <group>
+                                    <field name="company_id" groups="base.group_multi_company"/>
+                                    <field name="instance_type"/>
+                                    <field name="user_id" invisible="instance_type != 'user'" required="instance_type == 'user'"/>
+                                </group>
+                                <group>
+                                    <field name="profile_name" readonly="1"/>
+                                    <field name="phone_number" readonly="1"/>
+                                    <field name="api_key" widget="CopyClipboardChar" groups="base.group_system" readonly="1"/>
+                                </group>
+                            </group>
+                        </div>
+                        <div class="col-lg-4 text-center">
+                            <!-- QR Code (visível apenas quando conectando) -->
+                            <div invisible="status != 'connecting'">
+                                <button name="action_connect_instance" type="object" string="Atualizar QR Code" class="btn btn-link mb-2" icon="fa-refresh"/>
+                                <br/>
+                                <field name="qrcode_image" widget="image" readonly="1" nolabel="1" style="width: 200px; height: 200px;"/>
+                            </div>
+                            <!-- Profile Picture (visível quando NÃO está conectando e tem foto) -->
+                            <div invisible="status == 'connecting' or not profile_picture">
+                                 <field name="profile_picture" widget="image" class="img-fluid rounded" style="max-width: 200px; max-height: 200px;" readonly="1" nolabel="1"/>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- ======================== FIM DA ALTERAÇÃO (LAYOUT) ========================= -->
+
+                    <!-- Bloco de estatísticas -->
+                    <div class="row text-center my-3" invisible="status != 'connected'">
+                         <div class="col-lg-4">
+                            <div class="card shadow-sm">
+                                <div class="card-body">
+                                    <h5 class="card-title"><i class="fa fa-users me-2"/>Contatos</h5>
+                                    <p class="card-text fs-2 fw-bold"><field name="contact_count"/></p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="card shadow-sm">
+                                <div class="card-body">
+                                    <h5 class="card-title"><i class="fa fa-comments me-2"/>Chats</h5>
+                                    <p class="card-text fs-2 fw-bold"><field name="chat_count"/></p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="card shadow-sm">
+                                <div class="card-body">
+                                    <h5 class="card-title"><i class="fa fa-envelope me-2"/>Mensagens</h5>
+                                    <p class="card-text fs-2 fw-bold"><field name="message_count"/></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <notebook>
+                        <page string="Configurações">
+                            <group>
+                                <group>
+                                    <field name="reject_call" widget="boolean_toggle"/>
+                                    <field name="call_rejected_message" invisible="not reject_call"/>
+                                    <field name="ignore_group" widget="boolean_toggle"/>
+                                    <field name="always_online" widget="boolean_toggle"/>
+                                </group>
+                                <group>
+                                    <field name="view_message" widget="boolean_toggle"/>
+                                    <field name="sync_history" widget="boolean_toggle"/>
+                                    <field name="view_status" widget="boolean_toggle"/>
+                                </group>
+                            </group>
+                        </page>
+                        <page string="Webhook">
+                            <group>
+                                 <group>
+                                     <field name="enable_webhook" widget="boolean_toggle"/>
+                                     <field name="webhook_url" widget="CopyClipboardURL"/>
+                                 </group>
+                                 <group>
+                                     <field name="base64_webhook" widget="boolean_toggle"/>
+                                 </group>
+                             </group>
+                             <group>
+                                 <field name="mandatory_webhook_events_ids" widget="many2many_tags" options="{'no_create': True, 'no_create_edit': True}"/>
+                                 <field name="optional_webhook_events_ids" widget="many2many_tags" options="{'no_create': True, 'no_create_edit': True}"
+                                        domain="[('id', 'not in', mandatory_webhook_events_ids)]"/>
+                             </group>
+                        </page>
+                    </notebook>
+                </sheet>
+                
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <!-- Search view e actions permanecem os mesmos -->
+    <record id="whatsapp_instance_view_search" model="ir.ui.view">
+        <field name="name">whatsapp.instance.search</field>
+        <field name="model">whatsapp.instance</field>
+        <field name="arch" type="xml">
+            <search string="Search WhatsApp Instances">
+                <field name="name"/>
+                <field name="phone_number"/>
+                <field name="status"/>
+                <field name="instance_type"/>
+                <group expand="0" string="Group By"><filter string="Status" name="group_by_status" context="{'group_by': 'status'}"/></group>
+            </search>
+        </field>
+    </record>
+    
+    <record id="whatsapp_instance_action" model="ir.actions.act_window">
+        <field name="name">Instâncias do WhatsApp</field>
+        <field name="res_model">whatsapp.instance</field>
+        <field name="view_mode">kanban,list,form</field>
+        <field name="search_view_id" ref="whatsapp_instance_view_search"/>
+        <field name="help" type="html"><p class="o_view_nocontent_smiling_face">Crie uma nova instância do WhatsApp</p></field>
+    </record>
+    
+    <record id="action_server_sync_whatsapp_instances" model="ir.actions.server">
+        <field name="name">Sincronizar Instâncias</field>
+        <field name="model_id" ref="model_whatsapp_instance"/>
+        <field name="state">code</field>
+        <field name="code">action = model.action_sync_instances()</field>
+    </record>
+</odoo>

@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <!-- Ações para Company e Private Contacts permanecem as mesmas -->
+        <record id="action_company_contacts" model="ir.actions.act_window">
+            <field name="name">Company Contacts</field>
+            <field name="res_model">res.partner</field>
+            <field name="view_mode">kanban,list,form</field>
+            <field name="domain">[('is_private', '=', False)]</field>
+            <field name="context">{'default_is_private': False}</field>
+            <field name="search_view_id" ref="whatsapp_contact_search_view"/>
+            <field name="view_ids" eval="[
+                (5, 0, 0),
+                (0, 0, {'view_mode': 'kanban', 'view_id': ref('whatsapp_contact_management.whatsapp_contact_kanban_view')}),
+                (0, 0, {'view_mode': 'list', 'view_id': ref('whatsapp_contact_management.whatsapp_contact_tree_view')})
+            ]"/>
+        </record>
+        <record id="action_private_contacts" model="ir.actions.act_window">
+            <field name="name">My Contacts</field>
+            <field name="res_model">res.partner</field>
+            <field name="view_mode">kanban,list,form</field>
+            <field name="domain">[('owner_user_id', '=', uid)]</field>
+            <field name="context">{'default_is_private': True, 'default_owner_user_id': uid}</field>
+            <field name="search_view_id" ref="whatsapp_contact_search_view"/>
+            <field name="view_ids" eval="[
+                (5, 0, 0),
+                (0, 0, {'view_mode': 'kanban', 'view_id': ref('whatsapp_contact_management.whatsapp_contact_kanban_view')}),
+                (0, 0, {'view_mode': 'list', 'view_id': ref('whatsapp_contact_management.whatsapp_contact_tree_view')})
+            ]"/>
+            <field name="help" type="html">
+                <p class="o_view_nocontent_smiling_face">Create your first private contact!</p>
+                <p>These contacts are only visible to you until you promote them to a company contact.</p>
+            </field>
+        </record>
+
+        <!-- Herança da view de formulário com a correção -->
+        <record id="res_partner_view_form_inherit_privacy" model="ir.ui.view">
+            <field name="name">res.partner.form.inherit.privacy</field>
+            <field name="model">res.partner</field>
+            <field name="inherit_id" ref="base.view_partner_form"/>
+            <field name="arch" type="xml">
+                <xpath expr="//sheet" position="before">
+                    <header>
+                        <field name="can_verify_whatsapp" invisible="1"/>
+                        <button name="action_verify_whatsapp" type="object" string="Verificar WhatsApp" class="btn-secondary" icon="fa-whatsapp"
+                                invisible="can_verify_whatsapp == False or whatsapp_verified == True or mobile == False"/>
+                    </header>
+                </xpath>
+
+                <xpath expr="//div[@name='button_box']" position="inside">
+                    <field name="can_revert_promotion" invisible="1"/>
+                    <button name="action_promote_contact" string="Promote to Company" type="object" class="oe_stat_button" icon="fa-building-o" invisible="is_private == False"/>
+                    <button name="action_revert_contact" string="Revert to Private" type="object" class="oe_stat_button" icon="fa-user-secret" invisible="can_revert_promotion == False"/>
+                    <button name="action_revert_contact_admin" string="Revert (Admin)" type="object" class="oe_stat_button" icon="fa-user-secret" groups="base.group_system" invisible="is_private == False or can_revert_promotion == True"/>
+                </xpath>
+
+                <xpath expr="//h1/parent::div" position="after">
+                    <div>
+                        <field name="is_private" invisible="1"/>
+                        <field name="owner_user_id" invisible="1"/>
+                        <field name="promoted_date" invisible="1"/>
+                        <field name="whatsapp_verified" invisible="1"/>
+                        <field name="whatsapp_verified_date" invisible="1"/>
+                        <!-- ======================= INÍCIO DA CORREÇÃO ======================= -->
+                        <!-- Removido 't-att-title' e adicionado um 'title' estático -->
+                        <span class="badge text-bg-success me-1" invisible="whatsapp_verified == False" title="WhatsApp Verificado">
+                            <i class="fa fa-check-circle me-1"/>WhatsApp Verificado
+                        </span>
+                        <!-- ======================== FIM DA CORREÇÃO ========================= -->
+                        <span class="badge text-bg-info me-1" invisible="is_private == False">
+                            <i class="fa fa-user-secret me-1"/>Private Contact (Owned by <field name="owner_user_id" readonly="1" class="oe_inline"/>)
+                        </span>
+                        <span class="badge text-bg-success me-1" invisible="is_private == True">
+                            <i class="fa fa-building-o me-1"/>Company Contact
+                        </span>
+                    </div>
+                </xpath>
+            </field>
+        </record>
+    </data>
+</odoo>

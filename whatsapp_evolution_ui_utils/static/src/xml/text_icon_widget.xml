@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="whatsapp_evolution_ui_utils.TextIconWidget" owl="1">
+        <div t-if="hasValue" class="text-center">
+            <span
+                t-ref="icon"
+                t-attf-class="fa fa-{{ props.icon }} text-muted"
+                t-on-click="showTooltip"
+                role="button"
+                t-att-title="props.record.fields[props.name].string"
+            />
+        </div>
+    </t>
+
+    <t t-name="whatsapp_evolution_ui_utils.TextValueTooltip" owl="1">
+        <div t-out="info.value"/>
+    </t>
+
+</templates>

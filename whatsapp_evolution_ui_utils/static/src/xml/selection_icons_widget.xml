@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="whatsapp_evolution_ui_utils.SelectionIconsWidget" owl="1">
+        <div class="text-center" t-if="props.readonly">
+            <span
+                t-attf-class="fa fa-{{ valueIcon }}"
+                t-att-title="valueString"
+            />
+        </div>
+        <t t-else="">
+            <!-- Fallback to standard selection field if not readonly -->
+            <select class="o_input" t-on-change="onChange">
+                <t t-foreach="props.selection" t-as="option" t-key="option[0]">
+                    <option t-att-value="option[0]" t-att-selected="option[0] === props.record.data[props.name]">
+                        <t t-esc="option[1]" />
+                    </option>
+                </t>
+            </select>
+        </t>
+    </t>
+
+</templates>
