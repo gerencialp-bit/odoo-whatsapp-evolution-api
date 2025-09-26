@@ -43,8 +43,7 @@ class DiscussChannel(models.Model):
     
     def _add_members_to_whatsapp_channel(self, channel, partner, instance):
         """
-        Adiciona os membros corretos ao canal e o afixa.
-        CORRIGIDO: Usa uma abordagem mais compatível para afixar o canal.
+        Adiciona os membros corretos ao canal e o afixa para novos membros.
         """
         members_to_add = {partner}
         if instance.user_id:
@@ -58,53 +57,61 @@ class DiscussChannel(models.Model):
                     members_to_add.add(user.partner_id)
 
         current_member_ids = channel.channel_member_ids.mapped('partner_id').ids
+        # Filtra apenas os parceiros que ainda não são membros do canal.
         new_partners = [p for p in members_to_add if p.id not in current_member_ids]
 
         if new_partners:
+            commands = []
+            for p in new_partners:
+                # Para usuários internos, afixa o canal na criação. O contato externo não precisa disso.
+                is_internal = p.id != partner.id
+                commands.append(Command.create({'partner_id': p.id, 'is_pinned': is_internal}))
+            
             channel.write({
-                'channel_member_ids': [Command.create({'partner_id': p.id}) for p in new_partners]
+                'channel_member_ids': commands
             })
 
-        # --- INÍCIO DA CORREÇÃO DO 'PIN' ---
-        # Afixa o canal para os membros internos (não para o contato do WhatsApp)
-        internal_partners_to_pin = [p for p in members_to_add if p.id != partner.id]
-        for p in internal_partners_to_pin:
-            member = channel.channel_member_ids.filtered(lambda m: m.partner_id == p)
-            if member:
-                member.write({'is_pinned': True})
-        # --- FIM DA CORREÇÃO DO 'PIN' ---
-
-    # ============================ INÍCIO DA CORREÇÃO FINAL ============================
+    # ============================ INÍCIO DA CORREÇÃO (REAL-TIME E ENVIO) ============================
     def _notify_thread(self, message, msg_vals=False, **kwargs):
-        whatsapp_channels = self.filtered(lambda c: c.channel_type == 'whatsapp')
-        other_channels = self - whatsapp_channels
+        # PRIMEIRO, CHAMA A LÓGICA ORIGINAL DO ODOO PARA TODOS OS CANAIS.
+        # Isso garante que a notificação via bus.bus seja enviada para a interface,
+        # resolvendo o problema de não atualização em tempo real.
+        super(DiscussChannel, self)._notify_thread(message, msg_vals, **kwargs)
 
-        if other_channels:
-            super(DiscussChannel, other_channels)._notify_thread(message, msg_vals, **kwargs)
+        # AGORA, EXECUTA A LÓGICA DE ENVIO PARA O WHATSAPP APENAS NOS CANAIS RELEVANTES.
+        whatsapp_channels = self.filtered(lambda c: c.channel_type == 'whatsapp')
 
         for channel in whatsapp_channels:
-            if self.env.context.get('from_webhook') or (msg_vals and msg_vals.get('author_id') == channel.whatsapp_partner_id.id):
+            # Ignora a lógica de envio se a mensagem veio do webhook (evita loop)
+            # ou se o autor da mensagem no Odoo for o próprio contato do WhatsApp.
+            is_from_contact = msg_vals and msg_vals.get('author_id') == channel.whatsapp_partner_id.id
+            if self.env.context.get('from_webhook') or is_from_contact:
                 continue
             
             partner = channel.whatsapp_partner_id
             
+            # Validação do número de celular
             if not partner.mobile:
-                _logger.warning("Não foi possível enviar mensagem: Contato '%s' não possui número de celular.", partner.name)
+                _logger.warning("Não foi possível enviar mensagem via WhatsApp: Contato '%s' não possui número de celular.", partner.name)
                 message.sudo().write({'whatsapp_status': 'failed'})
                 continue
 
             try:
-                # PONTO CHAVE DA CORREÇÃO FINAL: Limpa o número para o formato que a API espera (apenas dígitos)
-                number_to_send = ''.join(filter(str.isdigit, partner.mobile))
+                # Obtém o número formatado usando o método já existente no módulo de contato
+                number_to_send = partner._get_whatsapp_formatted_number()
                 
+                # Extrai texto e anexos dos valores da mensagem
                 body = html2plaintext(msg_vals.get('body', ''))
                 attachments = self.env['ir.attachment'].browse(msg_vals.get('attachment_ids', []))
 
+                # Lógica de envio
                 if attachments:
+                    # Envia o primeiro anexo com a legenda (corpo da mensagem)
                     first_attachment = attachments[0]
                     channel.whatsapp_instance_id.send_attachment(
                         number_to_send, first_attachment, caption=body, partner=partner
                     )
+                    # Envia os anexos restantes sem legenda
                     for attachment in attachments[1:]:
                         channel.whatsapp_instance_id.send_attachment(
                             number_to_send, attachment, partner=partner
@@ -118,11 +125,12 @@ class DiscussChannel(models.Model):
                 _logger.info("Mensagem do canal #%s enviada com sucesso para o WhatsApp.", channel.id)
 
             except Exception as e:
-                _logger.error("Falha ao enviar mensagem do canal #%s para o WhatsApp: %s", channel.id, e)
+                _logger.error("Falha ao enviar mensagem do canal #%s para o WhatsApp: %s", channel.id, e, exc_info=True)
                 message.sudo().write({'whatsapp_status': 'failed'})
         
+        # O retorno do super() já foi tratado, então retornamos True.
         return True
-    # ============================ FIM DA CORREÇÃO FINAL ============================
+    # ============================ FIM DA CORREÇÃO (REAL-TIME E ENVIO) ============================
 
     @api.model
     def get_or_create_whatsapp_channel_for_partner(self, partner_id):
