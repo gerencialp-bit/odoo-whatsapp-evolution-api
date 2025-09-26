@@ -169,20 +169,21 @@
                         <page string="Configurações">
                             <group>
                                 <group>
-                                    <field name="reject_call" widget="boolean_toggle"/>
+                                    <field name="reject_call" widget="boolean_toggle" help="Rejeitar todas as chamadas"/>
                                     <field name="call_rejected_message" invisible="not reject_call"/>
-                                    <field name="ignore_group" widget="boolean_toggle"/>
-                                    <field name="always_online" widget="boolean_toggle"/>
+                                    <field name="ignore_group" widget="boolean_toggle" help="Ignorar todas as mensagens de grupos"/>
+                                    <field name="always_online" widget="boolean_toggle" help="Permanecer sempre online"/>
                                 </group>
                                 <group>
-                                    <field name="view_message" widget="boolean_toggle"/>
-                                    <field name="sync_history" widget="boolean_toggle"/>
-                                    <field name="view_status" widget="boolean_toggle"/>
+                                    <!-- O campo view_message já tinha um help, mas vamos usar o seu texto para padronizar -->
+                                    <field name="view_message" widget="boolean_toggle" help="Marcar todas as mensagens como lidas"/>
+                                    <field name="sync_history" widget="boolean_toggle" help="Sincronizar o histórico completo ao ler o QR Code"/>
+                                    <field name="view_status" widget="boolean_toggle" help="Marcar todos os status como visualizados"/>
                                 </group>
                             </group>
                         </page>
                         <page string="Webhook">
-                            <group>
+                             <group>
                                  <group>
                                      <field name="enable_webhook" widget="boolean_toggle"/>
                                      <field name="webhook_url" widget="CopyClipboardURL"/>
