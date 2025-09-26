@@ -72,6 +72,49 @@ class WhatsappInstance(models.Model):
 
     # ... (TODOS OS MÉTODOS ANTERIORES PERMANECEM AQUI) ...
 
+    # ============================ INÍCIO DO MÉTODO SOBRESCRITO ============================
+    def write(self, vals):
+        """
+        Sobrescreve o método write para sincronizar as configurações com a Evolution API
+        sempre que um campo relevante for alterado.
+        """
+        # Lista dos campos que representam configurações na API
+        settings_fields = [
+            'reject_call', 'call_rejected_message', 'ignore_group', 'always_online',
+            'view_message', 'sync_history', 'view_status'
+        ]
+        
+        # Chama o método original para salvar os dados no Odoo primeiro
+        res = super(WhatsappInstance, self).write(vals)
+
+        # Verifica se algum dos campos de configuração foi modificado
+        if any(field in vals for field in settings_fields):
+            for instance in self:
+                _logger.info("Sincronizando configurações para a instância '%s'...", instance.name)
+                # Monta o payload com as chaves em camelCase que a API espera
+                payload = {
+                    "rejectCall": instance.reject_call,
+                    "msgCall": instance.call_rejected_message,
+                    "groupsIgnore": instance.ignore_group,
+                    "alwaysOnline": instance.always_online,
+                    "readMessages": instance.view_message,
+                    "readStatus": instance.view_status,
+                    "syncFullHistory": instance.sync_history
+                }
+                try:
+                    # Chama o novo método da camada de API
+                    self.env['whatsapp.evolution.api']._api_set_settings(instance, payload)
+                    _logger.info("Configurações da instância '%s' sincronizadas com sucesso.", instance.name)
+                    # Adiciona uma nota no chatter para auditoria
+                    instance.message_post(body=_("As configurações da instância foram atualizadas na Evolution API."))
+                except Exception as e:
+                    _logger.warning("Falha ao sincronizar configurações para a instância '%s': %s", instance.name, e)
+                    # Opcional: Adicionar uma mensagem de erro no chatter
+                    instance.message_post(body=_("Falha ao atualizar as configurações na Evolution API: %s") % e)
+        
+        return res
+    # ============================= FIM DO MÉTODO SOBRESCRITO ==============================
+
     # ======================= INÍCIO DA CORREÇÃO DEFINITIVA DOS MÉTODOS DE ENVIO =======================
     def send_text(self, phone_number, message, partner=None):
         """
@@ -200,20 +243,22 @@ class WhatsappInstance(models.Model):
                 if not base_url or not api_key:
                     raise UserError(_("A URL e a Chave Global da API devem ser configuradas."))
 
+                # ============================ INÍCIO DO AJUSTE NO PAYLOAD ============================
+                # Alinhado com a API e o exemplo do wa_conn (chaves camelCase no nível raiz)
                 create_payload = {
                     "instanceName": vals.get('name'),
                     "qrcode": False,
                     "integration": "WHATSAPP-BAILEYS",
-                    "settings": {
-                        "reject_call": vals.get('reject_call', False),
-                        "msg_call": vals.get('call_rejected_message', "Não posso atender chamadas no momento."),
-                        "groups_ignore": vals.get('ignore_group', False),
-                        "always_online": vals.get('always_online', False),
-                        "read_messages": vals.get('view_message', True),
-                        "read_status": vals.get('view_status', False),
-                        "sync_full_history": vals.get('sync_history', False),
-                    }
+                    "rejectCall": vals.get('reject_call', False),
+                    "msgCall": vals.get('call_rejected_message', "Não posso atender chamadas no momento."),
+                    "groupsIgnore": vals.get('ignore_group', False),
+                    "alwaysOnline": vals.get('always_online', False),
+                    "readMessages": vals.get('view_message', True),
+                    "readStatus": vals.get('view_status', False),
+                    "syncFullHistory": vals.get('sync_history', False),
                 }
+                # ============================= FIM DO AJUSTE NO PAYLOAD ==============================
+
                 api_response = self.env['whatsapp.evolution.api']._send_api_request_global(
                     base_url, api_key, 'POST', '/instance/create', payload=create_payload
                 )

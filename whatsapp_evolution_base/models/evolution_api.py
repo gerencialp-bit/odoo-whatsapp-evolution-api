@@ -88,6 +88,16 @@ class EvolutionApi(models.AbstractModel):
         # A configuração do webhook usa a chave da PRÓPRIA instância, não a global.
         return self._send_api_request(instance_id, 'POST', endpoint, payload=webhook_payload)
 
+    # ============================ INÍCIO DA NOVA FUNÇÃO ============================
+    @api.model
+    def _api_set_settings(self, instance_id, settings_payload):
+        """
+        Define as configurações para uma instância específica.
+        """
+        endpoint = f"/settings/set/{instance_id.name}"
+        return self._send_api_request(instance_id, 'POST', endpoint, payload=settings_payload)
+     # ============================= FIM DA NOVA FUNÇÃO ==============================
+
     @api.model
     def _api_find_webhook(self, instance_id):
         """Busca a configuração de webhook existente para uma instância."""
