@@ -7,7 +7,7 @@
     'website': " `https://www.yourcompany.com` ", 
     'category': 'Discuss', 
     'version': '1.5', # Incrementando a versão 
-    'depends': ['mail', 'contacts', 'web'], 
+    'depends': ['mail', 'contacts', 'web', 'phone_validation'], # <-- DEPENDÊNCIA ADICIONADA AQUI 
     'data': [ 
         'security/ir.model.access.csv', 
         'data/evolution_api_config_data.xml',

@@ -115,3 +115,37 @@ class EvolutionApi(models.AbstractModel):
         payload = {'numbers': numbers if isinstance(numbers, list) else [numbers]}
         return self._send_api_request(instance_id, 'POST', endpoint, payload=payload)
     # ======================== FIM DA ADIÇÃO =========================
+
+    # ======================= INÍCIO DAS NOVAS FUNÇÕES DE ENVIO =======================
+    @api.model
+    def _api_send_text(self, instance_id, number, text, quoted_message=None):
+        """
+        Envia uma mensagem de texto simples.
+        """
+        endpoint = f"/message/sendText/{instance_id.name}"
+        payload = {
+            "number": number,
+            "text": text,
+        }
+        if quoted_message:
+            payload['quoted'] = {
+                "key": {"id": quoted_message.get('id')},
+                "message": {"conversation": quoted_message.get('conversation')}
+            }
+        return self._send_api_request(instance_id, 'POST', endpoint, payload=payload)
+
+    @api.model
+    def _api_send_media(self, instance_id, number, mediatype, media_url_or_base64, caption='', file_name=''):
+        """
+        Envia uma mídia (imagem, vídeo, documento).
+        """
+        endpoint = f"/message/sendMedia/{instance_id.name}"
+        payload = {
+            "number": number,
+            "mediatype": mediatype,
+            "media": media_url_or_base64,
+            "caption": caption,
+            "fileName": file_name,
+        }
+        return self._send_api_request(instance_id, 'POST', endpoint, payload=payload)
+    # ======================== FIM DAS NOVAS FUNÇÕES DE ENVIO =========================

@@ -2,9 +2,12 @@
 
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError
+from odoo.tools.mimetypes import guess_mimetype
 import requests
 import base64
+import json # <-- Importar json
 import logging
+import json
 from datetime import datetime
 
 _logger = logging.getLogger(__name__)
@@ -68,6 +71,88 @@ class WhatsappInstance(models.Model):
     ]
 
     # ... (TODOS OS MÉTODOS ANTERIORES PERMANECEM AQUI) ...
+
+    # ======================= INÍCIO DA CORREÇÃO DEFINITIVA DOS MÉTODOS DE ENVIO =======================
+    def send_text(self, phone_number, message, partner=None):
+        """
+        Envia uma mensagem de texto para um NÚMERO JÁ FORMATADO.
+        Opcionalmente, associa a mensagem a um parceiro.
+        """
+        self.ensure_one()
+        
+        vals = {
+            'instance_id': self.id,
+            'timestamp': fields.Datetime.now(),
+            'message_direction': 'outbound',
+            'partner_id': partner.id if partner else None,
+            'phone_number': phone_number,
+            'message_type': 'conversation',
+            'body': message,
+        }
+
+        try:
+            response = self.env['whatsapp.evolution.api']._api_send_text(self, phone_number, message)
+            vals.update({
+                'message_id': response.get('key', {}).get('id'),
+                'state': 'sent',
+                'raw_json': json.dumps(response),
+            })
+        except Exception as e:
+            _logger.error("Falha ao enviar mensagem de texto para %s: %s", phone_number, e)
+            vals.update({
+                'state': 'failed',
+                'raw_json': str(e),
+            })
+        
+        return self.env['whatsapp.message'].create(vals)
+
+    def send_attachment(self, phone_number, attachment, caption='', partner=None):
+        """
+        Envia um anexo para um NÚMERO JÁ FORMATADO.
+        Opcionalmente, associa a mensagem a um parceiro.
+        """
+        self.ensure_one()
+        
+        mimetype = attachment.mimetype or guess_mimetype(base64.b64decode(attachment.datas))
+        
+        if mimetype.startswith('image'):
+            mediatype = 'image'
+        elif mimetype.startswith('video'):
+            mediatype = 'video'
+        else:
+            mediatype = 'document'
+
+        media_base64 = attachment.datas.decode('utf-8')
+
+        vals = {
+            'instance_id': self.id,
+            'timestamp': fields.Datetime.now(),
+            'message_direction': 'outbound',
+            'partner_id': partner.id if partner else None,
+            'phone_number': phone_number,
+            'media_type': mediatype,
+            'body': caption,
+            'media_filename': attachment.name,
+        }
+
+        try:
+            response = self.env['whatsapp.evolution.api']._api_send_media(
+                self, phone_number, mediatype, media_base64, caption, attachment.name
+            )
+            vals.update({
+                'message_id': response.get('key', {}).get('id'),
+                'state': 'sent',
+                'raw_json': json.dumps(response),
+            })
+        except Exception as e:
+            _logger.error("Falha ao enviar anexo para %s: %s", phone_number, e)
+            vals.update({
+                'state': 'failed',
+                'raw_json': str(e),
+            })
+
+        return self.env['whatsapp.message'].create(vals)
+    # ======================== FIM DA CORREÇÃO DEFINITIVA DOS MÉTODOS DE ENVIO =========================
 
     @api.depends()
     def _compute_mandatory_webhook_events(self):

@@ -12,7 +12,30 @@ _logger = logging.getLogger(__name__)
 class ResPartner(models.Model):
     _inherit = 'res.partner'
 
-    # --- Campo movido do whatsapp_evolution_base (Tarefa 1.3) ---
+    # ============================ INÍCIO DA NOVA ADIÇÃO ============================
+    mobile_sanitized = fields.Char(
+        string="Mobile Sanitized",
+        compute='_compute_mobile_sanitized',
+        store=True,
+        index=True,
+    )
+
+    @api.depends('mobile')
+    def _compute_mobile_sanitized(self):
+        """
+        Calcula a versão sanitizada do campo 'mobile' para buscas eficientes.
+        """
+        for partner in self:
+            if partner.mobile:
+                # CORREÇÃO: Remove o argumento 'raise_on_mismatch' e usa fname='mobile'
+                partner.mobile_sanitized = partner._phone_format(
+                    fname='mobile',
+                )
+            else:
+                partner.mobile_sanitized = False
+    # ============================ FIM DA NOVA ADIÇÃO ============================
+
+    # --- Campo movido do whatsapp_evolution_base ---
     whatsapp_instance_id = fields.Many2one(
         'whatsapp.instance', string='WhatsApp Instance Origin',
         help='The WhatsApp instance that originated this contact. Used to trace back private contacts.',
@@ -20,7 +43,7 @@ class ResPartner(models.Model):
         copy=False
     )
 
-    # --- Campos de Privacidade (Tarefa 1.2) ---
+    # --- Campos de Privacidade ---
     is_private = fields.Boolean(
         string="Is Private Contact",
         default=False,
@@ -43,7 +66,6 @@ class ResPartner(models.Model):
         help="Date and time when the contact was promoted to a company contact."
     )
 
-    # ======================= INÍCIO DA ADIÇÃO =======================
     # --- Campos de Verificação do WhatsApp ---
     whatsapp_verified = fields.Boolean(
         string="WhatsApp Verified",
@@ -62,7 +84,6 @@ class ResPartner(models.Model):
         compute='_compute_can_verify_whatsapp',
         help="Technical field to control the visibility of the verification button."
     )
-    # ======================== FIM DA ADIÇÃO =========================
 
     # --- Campos Computados ---
     can_revert_promotion = fields.Boolean(
@@ -71,7 +92,14 @@ class ResPartner(models.Model):
         help="Technical field to check if the current user can revert the promotion within the time window."
     )
 
-    # --- SQL Constraints (Melhor Prática inspirada no muk_contacts) ---
+    contact_type = fields.Selection(
+        [('company', 'Company'), ('private', 'Private')],
+        string="Contact Type",
+        compute='_compute_contact_type',
+        store=True
+    )
+
+    # --- SQL Constraints ---
     def init(self):
         """ Garante que um contato da empresa (não privado) não tenha um dono. """
         self.env.cr.execute(
@@ -85,32 +113,18 @@ class ResPartner(models.Model):
             )
         )
 
-    # --- NOVO CAMPO COMPUTADO PARA O WIDGET DE ÍCONE ---
-    contact_type = fields.Selection(
-        [('company', 'Company'), ('private', 'Private')],
-        string="Contact Type",
-        compute='_compute_contact_type',
-        store=True # Store para permitir agrupamento e busca se necessário
-    )
-
     # --- Métodos Computados ---
     @api.depends('is_private')
     def _compute_contact_type(self):
-        """Define o tipo de contato para uso na UI."""
         for partner in self:
             partner.contact_type = 'private' if partner.is_private else 'company'
 
     @api.depends('is_private', 'promoted_date', 'owner_user_id')
     def _compute_can_revert_promotion(self):
-        """
-        Verifica se o usuário atual pode reverter a promoção.
-        Isso é verdade se o contato NÃO é privado, o usuário atual é o dono,
-        e a data de promoção está dentro da janela de tempo configurada.
-        """
         try:
             revert_window_hours = self._get_revert_window_hours()
         except (ValueError, TypeError):
-            revert_window_hours = 24  # Fallback
+            revert_window_hours = 24
             _logger.warning("Could not parse 'revert_promotion_window_hours'. Using default of 24 hours.")
 
         for partner in self:
@@ -121,21 +135,14 @@ class ResPartner(models.Model):
                     can_revert = True
             partner.can_revert_promotion = can_revert
 
-    # ======================= INÍCIO DA ADIÇÃO =======================
     def _compute_can_verify_whatsapp(self):
-        """
-        Verifica se existe alguma instância disponível para o usuário atual fazer a verificação.
-        A busca por instâncias é feita uma única vez para otimizar a performance.
-        """
         verifying_instance = self.env['whatsapp.instance']._get_verifying_instance()
         can_verify = bool(verifying_instance)
         for partner in self:
             partner.can_verify_whatsapp = can_verify
-    # ======================== FIM DA ADIÇÃO =========================
 
-    # --- Métodos de Ação (Botões) (Tarefa 1.2) ---
+    # --- Métodos de Ação (Botões) ---
     def action_promote_contact(self):
-        """Promove um contato particular para um contato da empresa, tornando-o público."""
         self.ensure_one()
         if not self.is_private:
             raise UserError(_("This contact is already a company contact."))
@@ -149,7 +156,6 @@ class ResPartner(models.Model):
         self.message_post(body=_("Contact promoted to a company contact by %s.") % self.env.user.name)
 
     def action_revert_contact(self):
-        """Permite ao usuário dono reverter sua própria promoção dentro da janela de tempo."""
         self.ensure_one()
         if self.is_private:
             raise UserError(_("This contact is already private."))
@@ -160,8 +166,7 @@ class ResPartner(models.Model):
         revert_deadline = self.promoted_date + timedelta(hours=revert_window_hours)
         if not self.promoted_date or datetime.now() > revert_deadline:
             raise UserError(
-                _("The time window (%s hours) to revert this promotion has expired. "
-                  "Please contact an administrator.") % revert_window_hours
+                _("The time window (%s hours) to revert this promotion has expired. Please contact an administrator.") % revert_window_hours
             )
 
         self.write({
@@ -171,7 +176,6 @@ class ResPartner(models.Model):
         self.message_post(body=_("Promotion reverted by the owner %s.") % self.env.user.name)
 
     def action_revert_contact_admin(self):
-        """Permite a um administrador reverter a promoção a qualquer momento."""
         self.ensure_one()
         if self.is_private:
             raise UserError(_("This contact is already private."))
@@ -179,43 +183,29 @@ class ResPartner(models.Model):
         self.write({
             'is_private': True,
             'promoted_date': False,
-            # Um admin pode decidir reatribuir o dono, mas por agora, mantemos o original
-            # 'owner_user_id': self.env.user.id,
         })
         self.message_post(body=_("Promotion reverted by administrator %s.") % self.env.user.name)
 
-    # ======================= INÍCIO DA ADIÇÃO =======================
     def action_verify_whatsapp(self):
-        """
-        Ação do botão para verificar o número de celular do contato via API da Evolution.
-        """
         if not self:
             return
-
         instance = self.env['whatsapp.instance']._get_verifying_instance()
         if not instance:
             raise UserError(_("Nenhuma instância conectada do WhatsApp foi encontrada para realizar a verificação. Por favor, contate um administrador."))
-
         verified_count = 0
         failed_count = 0
-
         for partner in self:
             if not partner.mobile:
                 partner.message_post(body=_("Falha na verificação do WhatsApp: O campo 'Celular' está vazio."))
                 failed_count += 1
                 continue
-
-            # Limpa o número para enviar para a API (remove tudo que não for dígito)
             clean_number = re.sub(r'\D', '', partner.mobile)
             if not clean_number:
                 partner.message_post(body=_("Falha na verificação do WhatsApp: O número de celular '%s' é inválido.") % partner.mobile)
                 failed_count += 1
                 continue
-
             try:
                 response = self.env['whatsapp.evolution.api']._api_check_whatsapp_numbers(instance, [clean_number])
-                
-                # A API retorna uma lista, pegamos o primeiro resultado
                 if response and isinstance(response, list) and response[0]:
                     result = response[0]
                     if result.get('exists'):
@@ -231,13 +221,10 @@ class ResPartner(models.Model):
                         failed_count += 1
                 else:
                     raise UserError(_("A API retornou uma resposta inesperada: %s") % response)
-
             except UserError as e:
                 _logger.error("Erro ao verificar o número do WhatsApp para '%s': %s", partner.name, e)
                 partner.message_post(body=_("Erro na verificação do WhatsApp: %s") % e)
                 failed_count += 1
-
-        # Notificação para o usuário com o resumo
         if verified_count or failed_count:
             message = _("%d contato(s) verificado(s) com sucesso. %d falha(ram).") % (verified_count, failed_count)
             return {
@@ -250,9 +237,29 @@ class ResPartner(models.Model):
                     'sticky': False,
                 }
             }
-    # ======================== FIM DA ADIÇÃO =========================
-    
+
+    # ============================ INÍCIO DOS MÉTODOS RESTAURADOS E ADICIONADOS ============================
     def _get_revert_window_hours(self):
         """Busca o valor do nosso novo modelo de configuração."""
         config = self.env['whatsapp.contact.config'].sudo()._get_config_record()
         return config.revert_promotion_window_hours or 24 # Fallback
+
+    def _get_whatsapp_formatted_number(self):
+        """
+        Este método é a fonte única da verdade para obter um número de WhatsApp formatado.
+        """
+        self.ensure_one()
+        if not self.mobile:
+            raise UserError(_("O contato '%s' não possui um número de celular (Mobile) definido.", self.name))
+        
+        try:
+            # CORREÇÃO: Remove o argumento e usa a chamada correta com fname='mobile'
+            number = self._phone_format(fname='mobile')
+            if not number:
+                raise UserError(_("O número de celular '%s' do contato '%s' não pôde ser validado.", self.mobile, self.name))
+            
+            return number.replace('+', '')
+        except Exception as e:
+            _logger.error("Falha ao formatar o número de celular para %s: %s", self.name, e)
+            raise UserError(_("Ocorreu um erro ao formatar o número de celular para %s: %s") % (self.name, e))
+    # ============================ FIM DOS MÉTODOS RESTAURADOS E ADICIONADOS ============================

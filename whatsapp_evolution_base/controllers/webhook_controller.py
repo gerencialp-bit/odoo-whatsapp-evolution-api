@@ -121,6 +121,13 @@ class WhatsappWebhookController(http.Controller):
                 if vals.get('body') is None:
                     vals['body'] = ""
                 
+                # ==================== INÍCIO DA NOVA LÓGICA ====================
+                # Verifica se a camada superior (contact_management) já identificou o parceiro
+                webhook_partner_id = request.context.get('webhook_partner_id')
+                if webhook_partner_id:
+                    vals['partner_id'] = webhook_partner_id
+                # ===================== FIM DA NOVA LÓGICA ======================
+
                 request.env['whatsapp.message'].sudo().create(vals)
                 _logger.info("Mensagem de '%s' (Tipo: %s) salva com sucesso.", vals['sender_name'], message_type_key)
 
