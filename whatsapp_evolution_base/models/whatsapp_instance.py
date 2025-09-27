@@ -3,6 +3,9 @@
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError
 from odoo.tools.mimetypes import guess_mimetype
+# ======================= IMPORTAÇÃO ADICIONADA =======================
+from urllib.parse import quote
+# =====================================================================
 import requests
 import base64
 import json # <-- Importar json
@@ -135,10 +138,25 @@ class WhatsappInstance(models.Model):
 
         try:
             response = self.env['whatsapp.evolution.api']._api_send_text(self, phone_number, message)
-            vals.update({
-                'message_id': response.get('key', {}).get('id'),
-                'state': 'sent',
-                'raw_json': json.dumps(response),
+            # ======================= INÍCIO DA CORREÇÃO ======================= 
+            # Extrai a mediaUrl da resposta e a adiciona aos valores do log. 
+            # O log da Evolution API mostra a 'mediaUrl' no nível superior da resposta. 
+            media_url_from_response = response.get('mediaUrl') 
+            if not media_url_from_response: 
+                # Fallback para extrair de dentro do objeto da mensagem, se necessário 
+                message_content = response.get('message', {}) 
+                api_media_keys = {'image': 'imageMessage', 'video': 'videoMessage', 'document': 'documentMessage'} 
+                media_key = api_media_keys.get(mediatype) 
+                if media_key and media_key in message_content: 
+                    media_url_from_response = message_content[media_key].get('url') 
+            
+            vals['media_url'] = media_url_from_response 
+            # ======================== FIM DA CORREÇÃO ========================= 
+
+            vals.update({ 
+                'message_id': response.get('key', {}).get('id'), 
+                'state': 'sent', 
+                'raw_json': json.dumps(response), 
             })
         except Exception as e:
             _logger.error("Falha ao enviar mensagem de texto para %s: %s", phone_number, e)
@@ -151,8 +169,7 @@ class WhatsappInstance(models.Model):
 
     def send_attachment(self, phone_number, attachment, caption='', partner=None):
         """
-        Envia um anexo para um NÚMERO JÁ FORMATADO.
-        Opcionalmente, associa a mensagem a um parceiro.
+        CORREÇÃO DEFINITIVA: Usa a URL interna do Odoo para o anexo enviado via Discuss.
         """
         self.ensure_one()
         
@@ -167,6 +184,13 @@ class WhatsappInstance(models.Model):
 
         media_base64 = attachment.datas.decode('utf-8')
 
+        # ======================= INÍCIO DA CORREÇÃO =======================
+        # Construímos a URL interna do Odoo para o anexo.
+        # Isso garante que o preview no log sempre funcione.
+        # A função `quote` garante que nomes de arquivo com espaços ou caracteres especiais funcionem na URL.
+        odoo_attachment_url = f'/web/content/{attachment.id}/{quote(attachment.name)}'
+        # ======================== FIM DA CORREÇÃO =========================
+
         vals = {
             'instance_id': self.id,
             'timestamp': fields.Datetime.now(),
@@ -176,12 +200,16 @@ class WhatsappInstance(models.Model):
             'media_type': mediatype,
             'body': caption,
             'media_filename': attachment.name,
+            'media_url': odoo_attachment_url, # <-- USANDO A URL DO ODOO
         }
 
         try:
             response = self.env['whatsapp.evolution.api']._api_send_media(
                 self, phone_number, mediatype, media_base64, caption, attachment.name
             )
+            
+            # Atualizamos o log apenas com o ID da mensagem e o JSON bruto.
+            # A URL e o nome do arquivo já foram definidos a partir do anexo do Odoo.
             vals.update({
                 'message_id': response.get('key', {}).get('id'),
                 'state': 'sent',

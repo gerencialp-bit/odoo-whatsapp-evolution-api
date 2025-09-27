@@ -102,7 +102,9 @@ class DiscussChannel(models.Model):
                 
                 # Extrai texto e anexos dos valores da mensagem
                 body = html2plaintext(msg_vals.get('body', ''))
-                attachments = self.env['ir.attachment'].browse(msg_vals.get('attachment_ids', []))
+                # Em vez de usar os `msg_vals` (que contêm comandos), pegamos os anexos 
+                # diretamente do registro `message` que já foi criado e processado. 
+                attachments = message.attachment_ids
 
                 # Lógica de envio
                 if attachments:

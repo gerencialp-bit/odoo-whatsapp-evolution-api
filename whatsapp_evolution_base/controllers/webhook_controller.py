@@ -24,9 +24,17 @@ class WhatsappWebhookController(http.Controller):
 
             event = payload.get('event')
             
-            if event == 'messages.upsert':
-                message_data = payload.get('data', {})
-                key = message_data.get('key', {})
+            # ======================= INÍCIO DA MODIFICAÇÃO ======================= 
+            # Adicionamos um contexto para passar a mensagem completa para a camada do Discuss. 
+            # Esta é a chave para permitir que o módulo `whatsapp_evolution_discuss` processe as mídias. 
+            if event == 'messages.upsert': 
+                message_data = payload.get('data', {}) 
+                request.update_context(webhook_message_data=message_data) 
+            # ======================== FIM DA MODIFICAÇÃO ========================= 
+            
+            if event == 'messages.upsert': 
+                message_data = payload.get('data', {}) 
+                key = message_data.get('key', {}) 
                 message_content = message_data.get('message', {})
                 
                 if not message_content or not key.get('id'):
