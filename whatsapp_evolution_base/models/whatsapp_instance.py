@@ -137,32 +137,26 @@ class WhatsappInstance(models.Model):
         }
 
         try:
+            # A chamada para a API permanece a mesma
             response = self.env['whatsapp.evolution.api']._api_send_text(self, phone_number, message)
-            # ======================= INÍCIO DA CORREÇÃO ======================= 
-            # Extrai a mediaUrl da resposta e a adiciona aos valores do log. 
-            # O log da Evolution API mostra a 'mediaUrl' no nível superior da resposta. 
-            media_url_from_response = response.get('mediaUrl') 
-            if not media_url_from_response: 
-                # Fallback para extrair de dentro do objeto da mensagem, se necessário 
-                message_content = response.get('message', {}) 
-                api_media_keys = {'image': 'imageMessage', 'video': 'videoMessage', 'document': 'documentMessage'} 
-                media_key = api_media_keys.get(mediatype) 
-                if media_key and media_key in message_content: 
-                    media_url_from_response = message_content[media_key].get('url') 
             
-            vals['media_url'] = media_url_from_response 
-            # ======================== FIM DA CORREÇÃO ========================= 
+            # A lógica incorreta foi removida. Agora processamos a resposta corretamente.
+            key_info = response.get('key', {})
+            if not key_info or not key_info.get('id'):
+                raise Exception(f"API response did not contain a valid message key. Response: {response}")
 
-            vals.update({ 
-                'message_id': response.get('key', {}).get('id'), 
-                'state': 'sent', 
-                'raw_json': json.dumps(response), 
+            vals.update({
+                'message_id': key_info.get('id'),
+                'state': 'sent',
+                'raw_json': json.dumps(response),
             })
         except Exception as e:
             _logger.error("Falha ao enviar mensagem de texto para %s: %s", phone_number, e)
             vals.update({
                 'state': 'failed',
                 'raw_json': str(e),
+                # Adiciona um message_id temporário para evitar o erro de banco de dados
+                'message_id': f"failed-{fields.Datetime.now()}-{phone_number}"
             })
         
         return self.env['whatsapp.message'].create(vals)
