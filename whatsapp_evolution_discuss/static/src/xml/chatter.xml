@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <templates xml:space="preserve">
 
-    <t t-name="whatsapp_evolution_discuss.Chatter.Buttons" t-inherit="mail.Chatter.Buttons" t-inherit-mode="extension">
+    <t t-name="whatsapp_evolution_discuss.Chatter.Buttons" t-inherit="mail.Chatter" t-inherit-mode="extension">
         <xpath expr="//button[hasclass('o_Chatter_button_log_note')]" position="before">
             <button class="btn btn-secondary o_Chatter_button_whatsapp me-2 mb-1 mb-lg-0"
                     title="Send WhatsApp Message"
