@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
-from odoo import api, fields, models, _, Command
-from odoo.tools import html2plaintext  # <-- CORREÇÃO: Importa a ferramenta correta
+from odoo import api, fields, models, _ as odoo_t, Command
+from odoo.tools import html2plaintext
+from odoo.exceptions import UserError
 import logging
 
 _logger = logging.getLogger(__name__)
@@ -106,47 +107,105 @@ class DiscussChannel(models.Model):
                 # diretamente do registro `message` que já foi criado e processado. 
                 attachments = message.attachment_ids
 
-                # Lógica de envio
+                # ======================= INÍCIO DA ALTERAÇÃO (RESPOSTAS) ======================= 
+                # Verifica se a mensagem é uma resposta a outra 
+                quoted_message = None 
+                if msg_vals.get('parent_id'): 
+                    quoted_message = self.env['mail.message'].browse(msg_vals['parent_id']) 
+                # ======================== FIM DA ALTERAÇÃO (RESPOSTAS) ========================= 
+                
+                # ======================= INÍCIO DA CORREÇÃO =======================
+                remote_message_id = None
+                log_message = None # <-- Variável para capturar o log
+
                 if attachments:
-                    # Envia o primeiro anexo com a legenda (corpo da mensagem)
                     first_attachment = attachments[0]
-                    channel.whatsapp_instance_id.send_attachment(
-                        number_to_send, first_attachment, caption=body, partner=partner
-                    )
-                    # Envia os anexos restantes sem legenda
+                    # ======================= INÍCIO DA CORREÇÃO ======================= 
+                    # Passa o 'quoted_message' também para o send_attachment 
+                    log_message, remote_message_id = channel.whatsapp_instance_id.send_attachment( 
+                        number_to_send, first_attachment, caption=body, partner=partner, quoted_message=quoted_message 
+                    ) 
+                    # ======================== FIM DA CORREÇÃO =========================                     # Envia anexos subsequentes sem esperar por IDs
                     for attachment in attachments[1:]:
                         channel.whatsapp_instance_id.send_attachment(
                             number_to_send, attachment, partner=partner
                         )
                 elif body:
-                    channel.whatsapp_instance_id.send_text(
-                        number_to_send, body, partner=partner
+                    # ======================= INÍCIO DA CORREÇÃO =======================
+                    # Capturamos o log retornado por send_text
+                    log_message, remote_message_id = channel.whatsapp_instance_id.send_text(
+                        number_to_send, body, partner=partner, quoted_message=quoted_message
                     )
-                
-                message.sudo().write({'whatsapp_status': 'sent'})
-                _logger.info("Mensagem do canal #%s enviada com sucesso para o WhatsApp.", channel.id)
+                    # ======================== FIM DA CORREÇÃO =========================
+
+                # Atualiza a mensagem do Odoo com o ID retornado pela API
+                if remote_message_id:
+                    message.sudo().write({
+                        'whatsapp_status': 'sent',
+                        'whatsapp_message_id_str': remote_message_id
+                    })
+                    
+                    # ======================= INÍCIO DA CORREÇÃO =======================
+                    # Agora, se foi uma resposta, atualizamos o log que acabamos de criar.
+                    if quoted_message and log_message:
+                        # Precisamos encontrar o log da mensagem original
+                        original_log = self.env['whatsapp.message'].search([
+                            ('message_id', '=', quoted_message.whatsapp_message_id_str)
+                        ], limit=1)
+                        if original_log:
+                            log_message.sudo().write({'quoted_message_id': original_log.id})
+                    # ======================== FIM DA CORREÇÃO =========================
+
+                    _logger.info("Mensagem do canal #%s enviada para o WhatsApp com ID: %s.", channel.id, remote_message_id)
+                else:
+                    # Se remote_message_id for None, significa que o envio falhou na camada inferior
+                    raise UserError(odoo_t("A API não retornou um ID de mensagem para a mensagem enviada."))
+
+                # ======================== FIM DA CORREÇÃO ========================= 
 
             except Exception as e:
                 _logger.error("Falha ao enviar mensagem do canal #%s para o WhatsApp: %s", channel.id, e, exc_info=True)
                 message.sudo().write({'whatsapp_status': 'failed'})
-        
-        # O retorno do super() já foi tratado, então retornamos True.
-        return True
-    # ============================ FIM DA CORREÇÃO (REAL-TIME E ENVIO) ============================
-
-    @api.model
-    def get_or_create_whatsapp_channel_for_partner(self, partner_id):
+         
+        return True 
+    
+    def _whatsapp_send_reaction(self, reaction):
         """
-        Método chamado pelo frontend para iniciar uma conversa.
+        Envia uma reação para o WhatsApp. Agora só é chamado na criação.
         """
-        partner = self.env['res.partner'].browse(partner_id)
-        if not partner.mobile:
-            raise UserError(_("O contato selecionado não possui um número de celular."))
+        _logger.info(f"Método _whatsapp_send_reaction chamado para o canal #{self.id} com a reação ID #{reaction.id}")
+        self.ensure_one()
 
-        instance = self.env['whatsapp.instance'].search([('status', '=', 'connected')], limit=1)
-        if not instance:
-            raise UserError(_("Nenhuma instância do WhatsApp conectada e disponível foi encontrada."))
+        if self.channel_type != 'whatsapp' or reaction.partner_id == self.whatsapp_partner_id:
+            return
         
-        channel = self._find_or_create_whatsapp_channel(partner, instance)
+        original_message = reaction.message_id
+        if not original_message.whatsapp_message_id_str:
+            return
         
-        return channel.channel_info('whatsapp_channel_created')[0]
+        try:
+            number_to_send = self.whatsapp_partner_id._get_whatsapp_formatted_number()
+            
+            payload = {
+                "key": {
+                    "remoteJid": f"{number_to_send}@s.whatsapp.net",
+                    "fromMe": original_message.author_id != self.whatsapp_partner_id,
+                    "id": original_message.whatsapp_message_id_str,
+                },
+                "reaction": reaction.content
+            }
+
+            reacted_message_log = self.env['whatsapp.message'].search([
+                ('message_id', '=', original_message.whatsapp_message_id_str)
+            ], limit=1)
+
+            self.whatsapp_instance_id.send_reaction(
+                number_to_send,
+                payload,
+                partner=self.whatsapp_partner_id,
+                reacted_message_log=reacted_message_log
+            )
+            _logger.info("Reação '%s' enviada e logada com sucesso.", reaction.content)
+
+        except Exception as e:
+            _logger.error("Falha ao enviar reação do canal #%s para o WhatsApp: %s", self.id, e, exc_info=True)

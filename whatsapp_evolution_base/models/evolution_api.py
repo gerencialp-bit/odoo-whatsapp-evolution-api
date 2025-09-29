@@ -4,7 +4,7 @@ import json
 import requests
 import logging
 
-from odoo import models, fields, api, _
+from odoo import models, fields, api, _ as odoo_t
 from odoo.exceptions import UserError, ValidationError
 
 _logger = logging.getLogger(__name__)
@@ -17,7 +17,7 @@ class EvolutionApi(models.AbstractModel):
     def _send_api_request(self, instance_id, method, endpoint, payload=None):
         base_url, _ = instance_id._get_api_config()
         if not instance_id.api_key:
-            raise UserError(_("A Chave da API (Token) não está configurada para a instância %s.") % instance_id.name)
+            raise UserError(odoo_t("A Chave da API (Token) não está configurada para a instância %s.") % instance_id.name)
 
         # --- CORREÇÃO DA URL APLICADA AQUI ---
         clean_base_url = base_url.rstrip('/')
@@ -33,7 +33,7 @@ class EvolutionApi(models.AbstractModel):
             return response.json() if response.content else {}
         except requests.exceptions.RequestException as e:
             _logger.error("Erro ao enviar requisição para a API da Evolution: %s", e)
-            raise UserError(_("Erro ao comunicar com a API da Evolution: %s") % str(e))
+            raise UserError(odoo_t("Erro ao comunicar com a API da Evolution: %s") % str(e))
 
     @api.model
     def _send_api_request_global(self, base_url, api_key, method, endpoint, payload=None):
@@ -55,10 +55,10 @@ class EvolutionApi(models.AbstractModel):
             # Tenta extrair uma mensagem de erro mais detalhada do corpo da resposta da API
             error_details = e.response.text
             _logger.error("Erro HTTP ao enviar requisição global para a API da Evolution (%s): %s", url, error_details)
-            raise UserError(_("Erro ao comunicar com a API da Evolution: %s - %s") % (str(e), error_details))
+            raise UserError(odoo_t("Erro ao comunicar com a API da Evolution: %s - %s") % (str(e), error_details))
         except requests.exceptions.RequestException as e:
             _logger.error("Erro de conexão ao enviar requisição global para a API da Evolution (%s): %s", e)
-            raise UserError(_("Erro de conexão ao comunicar com a API da Evolution: %s") % str(e))
+            raise UserError(odoo_t("Erro de conexão ao comunicar com a API da Evolution: %s") % str(e))
              
     @api.model
     def _api_get_instance_connect(self, instance_id):
@@ -130,32 +130,77 @@ class EvolutionApi(models.AbstractModel):
     @api.model
     def _api_send_text(self, instance_id, number, text, quoted_message=None):
         """
-        Envia uma mensagem de texto simples.
+        Envia uma mensagem de texto simples, com a estrutura de payload corrigida.
         """
         endpoint = f"/message/sendText/{instance_id.name}"
+        
+        # ======================= CORREÇÃO NO PAYLOAD =======================
+        # Revertendo para a estrutura "plana" que a sua API espera.
         payload = {
-            "number": number,
+            "number": str(number),
             "text": text,
         }
+        
         if quoted_message:
-            payload['quoted'] = {
-                "key": {"id": quoted_message.get('id')},
-                "message": {"conversation": quoted_message.get('conversation')}
-            }
+            payload['quoted'] = quoted_message
+        # ===============================================================
+
+        _logger.info("Enviando payload para /message/sendText: %s", json.dumps(payload, indent=2))
+        
         return self._send_api_request(instance_id, 'POST', endpoint, payload=payload)
 
+    # ======================= INÍCIO DAS ALTERAÇÕES =======================
     @api.model
     def _api_send_media(self, instance_id, number, mediatype, media_url_or_base64, caption='', file_name=''):
         """
-        Envia uma mídia (imagem, vídeo, documento).
+        MODIFICADO: Agora envia apenas imagem, vídeo ou documento.
         """
         endpoint = f"/message/sendMedia/{instance_id.name}"
         payload = {
             "number": number,
-            "mediatype": mediatype,
+            "mediatype": mediatype, # 'image', 'video', ou 'document'
             "media": media_url_or_base64,
             "caption": caption,
             "fileName": file_name,
         }
         return self._send_api_request(instance_id, 'POST', endpoint, payload=payload)
-    # ======================== FIM DAS NOVAS FUNÇÕES DE ENVIO =========================
+
+    @api.model
+    def _api_send_audio(self, instance_id, number, audio_url_or_base64):
+        """
+        NOVO: Envia uma mensagem de áudio (PTT), conforme a documentação da API.
+        """
+        endpoint = f"/message/sendWhatsAppAudio/{instance_id.name}"
+        payload = {
+            "number": number,
+            "audio": audio_url_or_base64, # A chave correta é 'audio'
+        }
+        return self._send_api_request(instance_id, 'POST', endpoint, payload=payload)
+
+    @api.model
+    def _api_send_sticker(self, instance_id, number, sticker_url_or_base64):
+        """
+        NOVO: Envia uma figurinha (sticker), conforme a documentação da API.
+        """
+        endpoint = f"/message/sendSticker/{instance_id.name}"
+        payload = {
+            "number": number,
+            "sticker": sticker_url_or_base64, # A chave correta é 'sticker'
+        }
+        return self._send_api_request(instance_id, 'POST', endpoint, payload=payload)
+
+    @api.model
+    def _api_send_reaction(self, instance_id, reaction_payload):
+        """
+        NOVO: Envia uma reação a uma mensagem existente.
+        A documentação não mostra 'number' no payload principal,
+        apenas dentro da chave 'key'.
+        """
+        endpoint = f"/message/sendReaction/{instance_id.name}"
+        
+        # Log do payload exato que estamos enviando para a API.
+        _logger.info("Enviando payload para /message/sendReaction: %s", json.dumps(reaction_payload, indent=2))
+        
+        # O payload já deve vir totalmente formatado.
+        return self._send_api_request(instance_id, 'POST', endpoint, payload=reaction_payload)
+    # ======================== FIM DAS ALTERAÇÕES =========================

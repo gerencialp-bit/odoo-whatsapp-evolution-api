@@ -3,6 +3,7 @@
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError
 from odoo.tools.mimetypes import guess_mimetype
+from odoo.tools import html2plaintext
 # ======================= IMPORTAÇÃO ADICIONADA =======================
 from urllib.parse import quote
 # =====================================================================
@@ -119,10 +120,10 @@ class WhatsappInstance(models.Model):
     # ============================= FIM DO MÉTODO SOBRESCRITO ==============================
 
     # ======================= INÍCIO DA CORREÇÃO DEFINITIVA DOS MÉTODOS DE ENVIO =======================
-    def send_text(self, phone_number, message, partner=None):
+    def send_text(self, phone_number, message, partner=None, quoted_message=None):
         """
-        Envia uma mensagem de texto para um NÚMERO JÁ FORMATADO.
-        Opcionalmente, associa a mensagem a um parceiro.
+        CORRIGIDO: Restaura a estrutura correta do payload para 'quoted' e
+        mantém a lógica de log correta.
         """
         self.ensure_one()
         
@@ -136,54 +137,73 @@ class WhatsappInstance(models.Model):
             'body': message,
         }
 
+        remote_message_id = None
         try:
-            # A chamada para a API permanece a mesma
-            response = self.env['whatsapp.evolution.api']._api_send_text(self, phone_number, message)
+            quoted_payload = None
+            if quoted_message and quoted_message.whatsapp_message_id_str:
+                # Encontra o log da mensagem original para vincular
+                original_log = self.env['whatsapp.message'].search([
+                    ('message_id', '=', quoted_message.whatsapp_message_id_str)
+                ], limit=1)
+                if original_log:
+                    vals['quoted_message_id'] = original_log.id
+
+                # ======================= INÍCIO DA CORREÇÃO =======================
+                # Constrói o payload da citação com a estrutura aninhada 'key',
+                # exatamente como a documentação da API exige.
+                quoted_payload = {
+                    "key": {"id": quoted_message.whatsapp_message_id_str},
+                    "message": {"conversation": html2plaintext(quoted_message.body)}
+                }
+                # ======================== FIM DA CORREÇÃO =========================
+
+            response = self.env['whatsapp.evolution.api']._api_send_text(
+                self, phone_number, message, quoted_message=quoted_payload
+            )
             
-            # A lógica incorreta foi removida. Agora processamos a resposta corretamente.
             key_info = response.get('key', {})
             if not key_info or not key_info.get('id'):
-                raise Exception(f"API response did not contain a valid message key. Response: {response}")
+                raise UserError(_("A API não retornou uma chave de mensagem válida."))
 
+            remote_message_id = key_info.get('id')
             vals.update({
-                'message_id': key_info.get('id'),
+                'message_id': remote_message_id,
                 'state': 'sent',
                 'raw_json': json.dumps(response),
             })
         except Exception as e:
             _logger.error("Falha ao enviar mensagem de texto para %s: %s", phone_number, e)
+            _logger.error("Detalhes da exceção: %s", e, exc_info=True)
             vals.update({
                 'state': 'failed',
                 'raw_json': str(e),
-                # Adiciona um message_id temporário para evitar o erro de banco de dados
                 'message_id': f"failed-{fields.Datetime.now()}-{phone_number}"
             })
         
-        return self.env['whatsapp.message'].create(vals)
-
-    def send_attachment(self, phone_number, attachment, caption='', partner=None):
+        log_message = self.env['whatsapp.message'].create(vals)
+        return log_message, remote_message_id
+    
+    def send_attachment(self, phone_number, attachment, caption='', partner=None, quoted_message=None):
         """
-        CORREÇÃO DEFINITIVA: Usa a URL interna do Odoo para o anexo enviado via Discuss.
+        MODIFICADO: Adicionado parâmetro 'quoted_message' para consistência.
         """
         self.ensure_one()
-        
+        _logger.info("Preparando para enviar anexo para %s", phone_number)
+
         mimetype = attachment.mimetype or guess_mimetype(base64.b64decode(attachment.datas))
-        
-        if mimetype.startswith('image'):
+        media_base64 = attachment.datas.decode('utf-8')
+        odoo_attachment_url = f'/web/content/{attachment.id}/{quote(attachment.name)}'
+
+        if 'image' in mimetype and 'webp' in mimetype:
+            mediatype = 'sticker'
+        elif 'image' in mimetype:
             mediatype = 'image'
-        elif mimetype.startswith('video'):
+        elif 'video' in mimetype:
             mediatype = 'video'
+        elif 'audio' in mimetype:
+            mediatype = 'audio'
         else:
             mediatype = 'document'
-
-        media_base64 = attachment.datas.decode('utf-8')
-
-        # ======================= INÍCIO DA CORREÇÃO =======================
-        # Construímos a URL interna do Odoo para o anexo.
-        # Isso garante que o preview no log sempre funcione.
-        # A função `quote` garante que nomes de arquivo com espaços ou caracteres especiais funcionem na URL.
-        odoo_attachment_url = f'/web/content/{attachment.id}/{quote(attachment.name)}'
-        # ======================== FIM DA CORREÇÃO =========================
 
         vals = {
             'instance_id': self.id,
@@ -194,18 +214,34 @@ class WhatsappInstance(models.Model):
             'media_type': mediatype,
             'body': caption,
             'media_filename': attachment.name,
-            'media_url': odoo_attachment_url, # <-- USANDO A URL DO ODOO
+            'media_url': odoo_attachment_url,
         }
 
+        # ======================= INÍCIO DA CORREÇÃO =======================
+        # Adicionamos a lógica para preencher o quoted_message_id no log
+        if quoted_message and quoted_message.whatsapp_message_id_str:
+            original_log = self.env['whatsapp.message'].search([
+                ('message_id', '=', quoted_message.whatsapp_message_id_str)
+            ], limit=1)
+            if original_log:
+                vals['quoted_message_id'] = original_log.id
+        # ======================== FIM DA CORREÇÃO =========================
+
+        remote_message_id = None # <-- Variável para armazenar o ID
         try:
-            response = self.env['whatsapp.evolution.api']._api_send_media(
-                self, phone_number, mediatype, media_base64, caption, attachment.name
-            )
-            
-            # Atualizamos o log apenas com o ID da mensagem e o JSON bruto.
-            # A URL e o nome do arquivo já foram definidos a partir do anexo do Odoo.
+            response = None
+            if mediatype == 'sticker':
+                response = self.env['whatsapp.evolution.api']._api_send_sticker(self, phone_number, media_base64)
+            elif mediatype == 'audio':
+                response = self.env['whatsapp.evolution.api']._api_send_audio(self, phone_number, media_base64)
+            else:
+                response = self.env['whatsapp.evolution.api']._api_send_media(
+                    self, phone_number, mediatype, media_base64, caption, attachment.name
+                )
+
+            remote_message_id = response.get('key', {}).get('id') # <-- Captura o ID
             vals.update({
-                'message_id': response.get('key', {}).get('id'),
+                'message_id': remote_message_id,
                 'state': 'sent',
                 'raw_json': json.dumps(response),
             })
@@ -214,9 +250,11 @@ class WhatsappInstance(models.Model):
             vals.update({
                 'state': 'failed',
                 'raw_json': str(e),
+                'message_id': f"failed-attachment-{fields.Datetime.now()}-{phone_number}"
             })
 
-        return self.env['whatsapp.message'].create(vals)
+        log_message = self.env['whatsapp.message'].create(vals)
+        return log_message, remote_message_id # <-- Retorna ambos
     # ======================== FIM DA CORREÇÃO DEFINITIVA DOS MÉTODOS DE ENVIO =========================
 
     @api.depends()
@@ -572,6 +610,58 @@ class WhatsappInstance(models.Model):
         
         return company_instance
     # ======================== FIM DA ADIÇÃO (MÉTODO) =========================
+
+    def send_reaction(self, phone_number, reaction_payload, partner=None, reacted_message_log=None):
+        """
+        Envia uma reação e cria um registro de log para ela.
+        """
+        self.ensure_one()
+
+        emoji = reaction_payload.get('reaction')
+        if emoji:
+            body_text = f"Reagiu com: {emoji}"
+        else:
+            body_text = "Reação removida"
+
+        # ======================= INÍCIO DA CORREÇÃO =======================
+        # O nome correto do campo é 'instance_id'.
+        vals = {
+            'instance_id': self.id, # <-- CORRIGIDO
+            'timestamp': fields.Datetime.now(),
+            'message_direction': 'outbound',
+            'partner_id': partner.id if partner else None,
+            'phone_number': phone_number,
+            'message_type': 'reactionMessage',
+            'body': body_text,
+            'state': 'failed',
+            'reacted_message_id': reacted_message_log.id if reacted_message_log else None,
+        }
+        # ======================== FIM DA CORREÇÃO =========================
+        
+        try:
+            if reaction_payload.get('reaction') is None:
+                reaction_payload['reaction'] = ""
+
+            response = self.env['whatsapp.evolution.api']._api_send_reaction(
+                self, reaction_payload
+            )
+            
+            key_info = response.get('key', {})
+            if not key_info or not key_info.get('id'):
+                raise UserError(_("A API de reação não retornou uma chave de mensagem válida."))
+
+            vals.update({
+                'message_id': key_info.get('id'),
+                'state': 'sent',
+                'raw_json': json.dumps(response),
+            })
+        except Exception as e:
+            _logger.error("Falha ao enviar reação para %s: %s", phone_number, e, exc_info=True)
+            vals['raw_json'] = str(e)
+            vals['message_id'] = f"failed-reaction-{fields.Datetime.now()}-{phone_number}"
+        
+        return self.env['whatsapp.message'].create(vals)
+    # ====================================================================
 
     def action_sync_with_odoo_user(self):
         """

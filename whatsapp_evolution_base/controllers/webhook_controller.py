@@ -64,6 +64,23 @@ class WhatsappWebhookController(http.Controller):
                     'body': "",
                 }
                 
+                # ======================= INÍCIO DA CORREÇÃO DE RESPOSTA =======================
+                # Lógica de busca de contexto mais robusta
+                context_info = message_content.get('contextInfo') or \
+                               message_data.get('contextInfo') or \
+                               message_content.get('extendedTextMessage', {}).get('contextInfo')
+
+                if context_info:
+                    quoted_msg_id_str = context_info.get('stanzaId')
+                    if quoted_msg_id_str:
+                        # Procura a mensagem original no nosso log
+                        quoted_msg = request.env['whatsapp.message'].sudo().search(
+                            [('message_id', '=', quoted_msg_id_str)], limit=1
+                        )
+                        if quoted_msg:
+                            vals['quoted_message_id'] = quoted_msg.id
+                # ======================== FIM DA CORREÇÃO DE RESPOSTA =========================
+                
                 # --- INÍCIO DA CORREÇÃO 1: Detecção de Tipo de Mensagem Aprimorada ---
                 # Lista de prioridade para garantir que peguemos o conteúdo real, não mensagens técnicas.
                 priority_message_types = [

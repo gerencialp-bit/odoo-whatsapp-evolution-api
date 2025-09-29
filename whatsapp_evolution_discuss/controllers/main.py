@@ -17,33 +17,71 @@ class DiscussWebhookController(ContactWebhookController):
 
     def _post_message_in_discuss_channel(self, instance, message_data, partner):
         """
-        MODIFICADO: Implementa a lógica para postar a mensagem no canal do Discuss,
-        processando texto e anexos (mídia) e atribuindo o autor correto.
+        CORRIGIDO: Separa a criação da mensagem da atualização com campos customizados.
         """
         if not partner:
             return
 
         try:
             channel = request.env['discuss.channel'].sudo()._find_or_create_whatsapp_channel(partner, instance)
-            
-            # --- LÓGICA DE MÍDIA MODIFICADA ---
             message_content = request.context.get('webhook_message_data', {}).get('message', {})
-            body, attachment_ids = self._extract_message_content_and_attachments(message_content)
-            # --- FIM DA LÓGICA DE MÍDIA ---
-
-            # Lógica de definição de autor permanece a mesma
             is_from_me = message_data.get('key', {}).get('fromMe', False)
-            author_id = False
+            message_id_str = message_data.get('key', {}).get('id')
+            
+            if 'reactionMessage' in message_content:
+                reaction = message_content['reactionMessage']
+                original_msg_id = reaction.get('key', {}).get('id')
+                emoji = reaction.get('text', '')
+                 
+                original_message = request.env['mail.message'].sudo().search([
+                    ('whatsapp_message_id_str', '=', original_msg_id)
+                ], limit=1)
 
+                if original_message:
+                    author_partner = partner if not is_from_me else (instance.user_id.partner_id if instance.user_id else request.env['res.partner'])
+                     
+                    # ======================= INÍCIO DA CORREÇÃO =======================
+                    # Busca a reação existente
+                    existing_reaction = request.env['mail.message.reaction'].sudo().search([
+                        ('message_id', '=', original_message.id),
+                        ('partner_id', '=', author_partner.id),
+                    ])
+                     
+                    # Se a reação recebida for vazia, significa remoção
+                    if not emoji and existing_reaction:
+                        existing_reaction.sudo().unlink()
+                        _logger.info("Reação do parceiro #%s removida da mensagem #%s.", author_partner.id, original_message.id)
+                    # Se não for vazia, cria ou atualiza
+                    elif emoji:
+                        if existing_reaction and existing_reaction.content != emoji:
+                            # Se o emoji mudou, remove o antigo
+                            existing_reaction.sudo().unlink()
+                         
+                        # Cria o novo (só se não existir um igual)
+                        if not self.env['mail.message.reaction'].sudo().search_count([
+                            ('message_id', '=', original_message.id),
+                            ('partner_id', '=', author_partner.id),
+                            ('content', '=', emoji)
+                        ]):
+                            self.env['mail.message.reaction'].sudo().create({
+                                'message_id': original_message.id,
+                                'partner_id': author_partner.id,
+                                'content': emoji,
+                            })
+                            _logger.info("Reação '%s' do parceiro #%s adicionada/atualizada na mensagem #%s.", emoji, author_partner.id, original_message.id)
+                    # ======================== FIM DA CORREÇÃO =========================
+                    # ======================= INÍCIO DA CORREÇÃO ======================= 
+                    # Notifica o Odoo de que a mensagem original foi alterada. 
+                    # Isso força o frontend a buscar os dados atualizados, incluindo as novas reações. 
+                    original_message.message_format() 
+                    # ======================== FIM DA CORREÇÃO ========================= 
+                return
+            
+            body, attachment_ids = self._extract_message_content_and_attachments(message_content)
+            
+            author_id = False
             if is_from_me:
-                if instance.user_id and instance.user_id.partner_id:
-                    author_id = instance.user_id.partner_id.id
-                else:
-                    _logger.warning(
-                        "Mensagem de saída (webhook) da instância '%s' não pôde ser postada por falta de usuário.",
-                        instance.name
-                    )
-                    return
+                author_id = instance.user_id.partner_id.id if instance.user_id and instance.user_id.partner_id else False
             else:
                 author_id = partner.id
             
@@ -51,25 +89,46 @@ class DiscussWebhookController(ContactWebhookController):
                 _logger.error("Não foi possível determinar um autor válido para a mensagem do webhook.")
                 return
 
-            ctx = {'from_webhook': True}
-
-            # Se não houver corpo de texto nem anexos, não há o que postar.
             if not body and not attachment_ids:
-                _logger.info("Webhook ignorado para o Discuss: mensagem sem conteúdo de texto ou mídia processável.")
-                return 
+                _logger.info("Webhook ignorado para o Discuss: mensagem sem conteúdo processável.")
+                return
 
-            # Posta a mensagem com o corpo e os anexos
-            channel.with_context(**ctx).message_post(
-                body=body,
-                author_id=author_id,
-                message_type='comment',
-                subtype_xmlid='mail.mt_comment',
-                attachment_ids=attachment_ids
-            )
-            _logger.info(
-                "Mensagem do webhook (com %d anexos) postada no canal #%s com autor ID: %s.",
-                len(attachment_ids), channel.id, author_id
-            )
+            # ======================= INÍCIO DA CORREÇÃO DE RESPOSTA =======================
+            post_vals = {
+                'body': body,
+                'author_id': author_id,
+                'message_type': 'comment',
+                'subtype_xmlid': 'mail.mt_comment',
+                'attachment_ids': attachment_ids,
+            }
+            
+            # Lógica de busca de contexto mais robusta
+            context_info = message_content.get('contextInfo') or \
+                           message_data.get('contextInfo') or \
+                           message_content.get('extendedTextMessage', {}).get('contextInfo')
+
+            if context_info:
+                quoted_msg_id = context_info.get('stanzaId')
+                if quoted_msg_id:
+                    # Busca a mensagem original no Discuss usando nosso campo de rastreamento
+                    parent_message = request.env['mail.message'].sudo().search([
+                        ('whatsapp_message_id_str', '=', quoted_msg_id)
+                    ], limit=1)
+                    if parent_message:
+                        post_vals['parent_id'] = parent_message.id
+            
+            ctx = {'from_webhook': True}
+            
+            new_message = channel.with_context(**ctx).message_post(**post_vals)
+            
+            if new_message and message_id_str:
+                new_message.sudo().write({
+                    'whatsapp_message_id_str': message_id_str
+                })
+            
+            _logger.info("Mensagem do webhook (ID: %s) postada no canal #%s e atualizada.", message_id_str, channel.id)
+            # ======================== FIM DA CORREÇÃO DE RESPOSTA =========================
+
         except Exception as e:
             _logger.error("Falha ao postar mensagem do webhook no canal do Discuss: %s", e, exc_info=True)
 

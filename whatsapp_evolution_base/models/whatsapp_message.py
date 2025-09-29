@@ -22,8 +22,13 @@ class WhatsappMessage(models.Model):
     is_group = fields.Boolean(string='Group Message', readonly=True) 
     phone_number = fields.Char(string='Phone Number', readonly=True) 
     message_type = fields.Char(string='Message Type') 
-    body = fields.Text(string='Message Body / Caption') 
-    media_type = fields.Selection([ 
+    body = fields.Text(string='Message Body / Caption')
+    
+    # ======================= NOVO CAMPO ADICIONADO =======================
+    quoted_message_id = fields.Many2one('whatsapp.message', string="Quoted Message", readonly=True)
+    # ====================================================================
+    
+    media_type = fields.Selection([
         ('image', 'Image'), ('video', 'Video'), ('sticker', 'Sticker'), 
         ('audio', 'Audio'), ('document', 'Document'), ('other', 'Other'), 
     ], string='Media Type', readonly=True) 

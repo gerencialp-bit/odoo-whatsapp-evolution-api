@@ -31,6 +31,14 @@ class ContactWebhookController(WhatsappWebhookController):
                 return {'status': 'ok', 'message': 'Instance not found'}
 
             event = payload.get('event')
+            
+            # ======================= INÍCIO DA CORREÇÃO =======================
+            # Ignora eventos de chamada para evitar criação de contatos indesejados 
+            # e mensagens automáticas que não queremos. 
+            if event == 'call': 
+                _logger.info("Webhook de chamada (event: 'call') ignorado.") 
+                return {'status': 'ok', 'message': 'Call event ignored'}
+            # ======================== FIM DA CORREÇÃO =========================
             partner = request.env['res.partner']
 
             if event == 'messages.upsert':
@@ -93,10 +101,15 @@ class ContactWebhookController(WhatsappWebhookController):
         # Se não há um JID de parceiro ou é uma mensagem de grupo genérica, não faz nada
         if not partner_jid or '@g.us' in partner_jid:
             return request.env['res.partner']
+            
+        # ======================= INÍCIO DA CORREÇÃO =======================
+        # Limpa o JID para remover qualquer coisa após ':' ou '@'
+        # Ex: "55123456:14@s.whatsapp.net" -> "55123456"
+        clean_jid = partner_jid.split('@')[0].split(':')[0]
+        # ======================== FIM DA CORREÇÃO =========================
 
-        phone_number_only = partner_jid.split('@')[0]
         Partner = request.env['res.partner'].sudo()
-        sanitized_number = ''.join(filter(str.isdigit, phone_number_only))
+        sanitized_number = ''.join(filter(str.isdigit, clean_jid))
         
         domain = ['|', ('mobile', 'ilike', sanitized_number), ('phone', 'ilike', sanitized_number)]
         partner = Partner.search(domain, limit=1)

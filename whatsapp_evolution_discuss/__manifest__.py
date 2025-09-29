@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     'name': "WhatsApp Evolution - Discuss Integration",
-    'version': '18.0.1.0.1', # Incrementando a versão
+    'version': '18.0.1.0.3', # Incrementando a versão
     'summary': 'Integrates WhatsApp Evolution with Odoo Discuss and Chatter.',
     'description': """
         - Enables two-way conversations via Odoo Discuss.
@@ -15,12 +15,11 @@
         'whatsapp_contact_management',
         'mail',
     ],
-    # A chave 'data' agora só carrega views de backend
     'data': [
         'security/ir.model.access.csv',
         'wizard/whatsapp_composer_views.xml',
+        # 'data/automation.xml', # <-- LINHA REMOVIDA
     ],
-    # A nova chave 'assets' carrega os arquivos de frontend
     'assets': {
         'web.assets_backend': [
             # Patches existentes

@@ -253,8 +253,19 @@ class ResPartner(models.Model):
             raise UserError(_("O contato '%s' não possui um número de celular (Mobile) definido.", self.name))
         
         try:
-            # CORREÇÃO: Remove o argumento e usa a chamada correta com fname='mobile'
-            number = self._phone_format(fname='mobile')
+            # ======================= INÍCIO DA CORREÇÃO =======================
+            # Limpa o número de qualquer caractere não numérico, exceto o '+' inicial.
+            # Isso remove sufixos como ':14' ou qualquer outro lixo.
+            clean_mobile = self.mobile
+            if clean_mobile and not clean_mobile.startswith('+'):
+                clean_mobile = '+' + clean_mobile
+            clean_mobile = '+' + ''.join(filter(str.isdigit, clean_mobile))
+
+            # Cria um parceiro temporário em memória com o número limpo para usar o método _phone_format
+            temp_partner = self.new({'mobile': clean_mobile})
+            number = temp_partner._phone_format(fname='mobile')
+            # ======================== FIM DA CORREÇÃO =========================
+
             if not number:
                 raise UserError(_("O número de celular '%s' do contato '%s' não pôde ser validado.", self.mobile, self.name))
             
